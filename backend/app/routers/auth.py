@@ -1,11 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.user import User
 from app.schemas.user import (
-    TokenResponse,
-    UserLogin,
     UserRegister,
     UserResponse,
 )
@@ -25,38 +24,53 @@ def register(payload: UserRegister, db: Session = Depends(get_db)):
     if db.query(User).filter(User.email == payload.email).first():
         raise HTTPException(status_code=400, detail="Email already registered")
 
-    if payload.role not in ("student", "guard", "manager"):
-        raise HTTPException(status_code=400, detail="Invalid role")
-
-    user = User(
+    new_user = User(
         name=payload.name,
         email=payload.email,
         password_hash=hash_password(payload.password),
         role=payload.role,
         student_id=payload.student_id,
-        guard_id=payload.guard_id,
-        shift=payload.shift,
-        manager_id=payload.manager_id,
-        department=payload.department,
+        vehicle_reg=payload.vehicle_reg,
+        employee_id=payload.employee_id,
     )
-    db.add(user)
+    db.add(new_user)
     db.commit()
-    db.refresh(user)
-    return user
+    db.refresh(new_user)
+    return new_user
 
 
-@router.post("/login", response_model=TokenResponse)
-def login(payload: UserLogin, db: Session = Depends(get_db)):
-    """Authenticate user and return JWT."""
-    user = db.query(User).filter(User.email == payload.email).first()
-    if not user or not verify_password(payload.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-
-    token = create_access_token(user.id, user.role)
-    return TokenResponse(
-        access_token=token,
-        user=UserResponse.model_validate(user),
+@router.post("/login")
+def login(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db)
+):
+    """
+    Authenticate a user and return a JWT token.
+    OAuth2 compatible token login, accepts username (email) and password as form data.
+    """
+    user = db.query(User).filter(User.email == form_data.username).first()
+    
+    if not user or not verify_password(form_data.password, user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    access_token = create_access_token(
+        data={"sub": str(user.id), "role": user.role}
     )
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": {
+            "id": user.id,
+            "name": user.name,
+            "email": user.email,
+            "role": user.role
+        }
+    }
 
 
 @router.get("/me", response_model=UserResponse)
