@@ -3,6 +3,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 
+import EntryExit from './pages/guard/EntryExit';
+
 // Pages
 import LoginPage from './pages/LoginPage';
 import StudentDashboard from './pages/student/Dashboard';
@@ -25,16 +27,12 @@ function App() {
             } 
           />
 
-          {/* Guard Routes (Placeholder for now) */}
+          {/* Guard Routes */}
           <Route 
-            path="/guard" 
+            path="/guard/*" 
             element={
               <ProtectedRoute allowedRoles={['guard']}>
-                <div style={{ padding: '2rem', textAlign: 'center' }}>
-                  <h1>Security Guard Panel Dashboard</h1>
-                  <p>In development...</p>
-                  <button onClick={() => { localStorage.removeItem('token'); window.location.href='/' }} className="btn-primary" style={{ width: 'auto', marginTop: '1rem' }}>Logout</button>
-                </div>
+                <EntryExit />
               </ProtectedRoute>
             } 
           />
