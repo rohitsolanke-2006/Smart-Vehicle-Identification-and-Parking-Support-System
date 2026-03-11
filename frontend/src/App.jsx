@@ -4,6 +4,7 @@ import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 
 import EntryExit from './pages/guard/EntryExit';
+import Analytics from './pages/manager/Analytics';
 
 // Pages
 import LoginPage from './pages/LoginPage';
@@ -37,16 +38,20 @@ function App() {
             } 
           />
 
-          {/* Manager Routes (Placeholder for now) */}
+          {/* Manager Routes */}
           <Route 
             path="/manager" 
             element={
               <ProtectedRoute allowedRoles={['manager']}>
-                <div style={{ padding: '2rem', textAlign: 'center' }}>
-                  <h1>Manager Analytics Dashboard</h1>
-                  <p>In development...</p>
-                  <button onClick={() => { localStorage.removeItem('token'); window.location.href='/' }} className="btn-primary" style={{ width: 'auto', marginTop: '1rem' }}>Logout</button>
-                </div>
+                <Analytics />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/manager/analytics" 
+            element={
+              <ProtectedRoute allowedRoles={['manager']}>
+                <Analytics />
               </ProtectedRoute>
             } 
           />
