@@ -1,5 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
+from fastapi import APIRouter, Depends, Form, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -35,22 +34,28 @@ def register(payload: UserRegister, db: Session = Depends(get_db)):
     )
     db.add(new_user)
     db.commit()
-    db.refresh(new_user)
-    return new_user
+from pydantic import BaseModel
 
+class UserLogin(BaseModel):
+    email: str
+    password: str
 
 @router.post("/login")
 def login(
-    form_data: OAuth2PasswordRequestForm = Depends(),
+    credentials: UserLogin,
     db: Session = Depends(get_db)
 ):
     """
     Authenticate a user and return a JWT token.
     OAuth2 compatible token login, accepts username (email) and password as form data.
     """
-    user = db.query(User).filter(User.email == form_data.username).first()
+    user = db.query(User).filter(User.email == credentials.email).first()
     
-    if not user or not verify_password(form_data.password, user.password_hash):
+    print(f"DEBUG LOGIN - Email: '{credentials.email}' Password: '{credentials.password}' - Found User: {user is not None}")
+    if user:
+        print(f"DEBUG HASH - DB: '{user.password_hash}' Match: {verify_password(credentials.password, user.password_hash)}")
+        
+    if not user or not verify_password(credentials.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",

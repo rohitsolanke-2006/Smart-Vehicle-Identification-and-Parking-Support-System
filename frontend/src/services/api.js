@@ -26,7 +26,11 @@ async function handleResponse(response) {
         let errorMsg = 'An error occurred';
         try {
             const errorData = await response.json();
-            errorMsg = errorData.detail || errorMsg;
+            if (Array.isArray(errorData.detail)) {
+                errorMsg = errorData.detail[0].msg;
+            } else {
+                errorMsg = errorData.detail || errorMsg;
+            }
         } catch (e) {
             errorMsg = response.statusText;
         }
@@ -40,14 +44,10 @@ async function handleResponse(response) {
 // ==========================================
 
 export async function login(email, password) {
-  const formData = new URLSearchParams();
-  formData.append('username', email); // OAuth2 expects 'username' field
-  formData.append('password', password);
-
   const response = await fetch(`${BASE_URL}/auth/login`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: formData,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: email, password: password }),
   });
   return handleResponse(response);
 }

@@ -55,7 +55,7 @@ export default function LoginPage() {
               className="form-control"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="e.g. om@viit.ac.in"
+              placeholder="e.g. om@vit.edu"
               required
             />
           </div>
@@ -86,9 +86,9 @@ export default function LoginPage() {
         <div style={styles.demoInfo}>
           <p><strong>Demo Accounts:</strong></p>
           <ul style={{ paddingLeft: '20px', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-            <li>Student: om@viit.ac.in</li>
-            <li>Guard: guard@viit.ac.in</li>
-            <li>Manager: manager@viit.ac.in</li>
+            <li>Student: om@vit.edu</li>
+            <li>Guard: guard@vit.edu</li>
+            <li>Manager: manager@vit.edu</li>
             <li>Password (All): testpass123</li>
           </ul>
         </div>

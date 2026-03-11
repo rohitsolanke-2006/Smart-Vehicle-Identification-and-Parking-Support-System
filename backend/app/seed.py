@@ -27,31 +27,31 @@ def seed():
     demo_users = [
         {
             "name": "Riya Patel",
-            "email": "student@viit.ac.in",
-            "password": "student123",
+            "email": "student@vit.edu",
+            "password": "testpass123",
             "role": "student",
             "student_id": "STU201",
         },
         {
             "name": "Suresh Kumar",
-            "email": "guard@viit.ac.in",
-            "password": "guard123",
+            "email": "guard@vit.edu",
+            "password": "testpass123",
             "role": "guard",
             "guard_id": "GRD01",
             "shift": "Morning",
         },
         {
             "name": "Dr. Anita Desai",
-            "email": "manager@viit.ac.in",
-            "password": "manager123",
+            "email": "manager@vit.edu",
+            "password": "testpass123",
             "role": "manager",
             "manager_id": "MGR01",
             "department": "Computer Engg",
         },
         {
             "name": "Om Soma",
-            "email": "om@viit.ac.in",
-            "password": "om123",
+            "email": "om@vit.edu",
+            "password": "testpass123",
             "role": "student",
             "student_id": "STU044",
         },
@@ -74,9 +74,9 @@ def seed():
 
     db.commit()
     db.close()
-    print("\n✅ Seed complete!")
+    print("\n[OK] Seed complete!")
 
 
 if __name__ == "__main__":
-    print("🌱 Seeding database...\n")
+    print("[RUN] Seeding database...\n")
     seed()
