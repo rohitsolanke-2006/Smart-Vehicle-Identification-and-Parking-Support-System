@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -7,12 +7,42 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.parking_log import ParkingLog
 from app.models.parking_zone import ParkingZone
+from app.models.queue_entry import QueueEntry
 from app.models.vehicle import Vehicle
+from app.models.user import User
 from app.schemas.vehicle import VehicleEntry, VehicleExit, VehicleResponse, VehicleSearchResponse
-from app.services.auth_service import require_role
+from app.services.auth_service import require_role, get_current_user
 
 router = APIRouter(prefix="/vehicles", tags=["Vehicles"])
 
+def _auto_checkout_stale(db: Session, max_minutes: int = 10):
+    """Auto-vacate vehicles parked longer than 10 minutes (for demo)."""
+    threshold = datetime.utcnow() - timedelta(minutes=max_minutes)
+    stale = db.query(Vehicle).filter(Vehicle.entry_time <= threshold).all()
+    for v in stale:
+        zone = db.query(ParkingZone).filter(ParkingZone.zone_name == v.zone_name).first()
+        if zone and zone.occupied > 0:
+            zone.occupied -= 1
+            
+        log = ParkingLog(
+            zone_name=v.zone_name,
+            reg_number=v.reg_number,
+            action="EXIT",
+            timestamp=datetime.utcnow(),
+        )
+        db.add(log)
+        
+        waiting = db.query(QueueEntry).filter(
+            QueueEntry.zone_name == v.zone_name,
+            QueueEntry.status == "WAITING"
+        ).order_by(QueueEntry.created_at.asc()).first()
+        if waiting:
+            waiting.status = "NOTIFIED"
+            waiting.notified_at = datetime.utcnow()
+            
+        db.delete(v)
+    if stale:
+        db.commit()
 
 @router.post("/entry", response_model=VehicleResponse, status_code=201)
 def record_entry(
@@ -88,6 +118,20 @@ def record_exit(
 
     duration = (datetime.utcnow() - vehicle.entry_time).total_seconds() / 60
 
+    # ── Virtual Queue: notify first waiting student for this zone ──────────
+    waiting = (
+        db.query(QueueEntry)
+        .filter(
+            QueueEntry.zone_name == vehicle.zone_name,
+            QueueEntry.status == "WAITING",
+        )
+        .order_by(QueueEntry.created_at.asc())
+        .first()
+    )
+    if waiting:
+        waiting.status = "NOTIFIED"
+        waiting.notified_at = datetime.utcnow()
+
     db.delete(vehicle)
     db.commit()
 
@@ -95,6 +139,7 @@ def record_exit(
         "message": "Vehicle exit recorded successfully",
         "reg_number": payload.reg_number,
         "duration_minutes": round(duration, 1),
+        "queue_notified": waiting.student_email if waiting else None,
     }
 
 
@@ -119,6 +164,69 @@ def search_vehicle(
         is_mis_parked=vehicle.is_mis_parked,
         duration_minutes=round(duration, 1),
     )
+
+
+@router.get("/my", response_model=VehicleSearchResponse)
+def get_my_vehicle(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get the active parking session for the currently logged-in student."""
+    if not current_user.vehicle_reg:
+        raise HTTPException(status_code=404, detail="No vehicle registered to profile.")
+        
+    _auto_checkout_stale(db)
+    
+    vehicle = db.query(Vehicle).filter(Vehicle.reg_number == current_user.vehicle_reg).first()
+    if not vehicle:
+        raise HTTPException(status_code=404, detail="No active parking session found.")
+        
+    duration = (datetime.utcnow() - vehicle.entry_time).total_seconds() / 60
+    return VehicleSearchResponse(
+        reg_number=vehicle.reg_number,
+        zone_name=vehicle.zone_name,
+        entry_time=vehicle.entry_time,
+        is_mis_parked=vehicle.is_mis_parked,
+        duration_minutes=round(duration, 1),
+    )
+
+
+@router.post("/self-checkout")
+def self_checkout(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Allow a student to manually release their parking spot."""
+    if not current_user.vehicle_reg:
+        raise HTTPException(status_code=400, detail="No vehicle registered.")
+        
+    vehicle = db.query(Vehicle).filter(Vehicle.reg_number == current_user.vehicle_reg).first()
+    if not vehicle:
+        raise HTTPException(status_code=404, detail="No active parking session found.")
+        
+    zone = db.query(ParkingZone).filter(ParkingZone.zone_name == vehicle.zone_name).first()
+    if zone and zone.occupied > 0:
+        zone.occupied -= 1
+        
+    log = ParkingLog(
+        zone_name=vehicle.zone_name,
+        reg_number=vehicle.reg_number,
+        action="EXIT",
+        timestamp=datetime.utcnow(),
+    )
+    db.add(log)
+    
+    waiting = db.query(QueueEntry).filter(
+        QueueEntry.zone_name == vehicle.zone_name,
+        QueueEntry.status == "WAITING"
+    ).order_by(QueueEntry.created_at.asc()).first()
+    if waiting:
+        waiting.status = "NOTIFIED"
+        waiting.notified_at = datetime.utcnow()
+        
+    db.delete(vehicle)
+    db.commit()
+    return {"message": "Self-checkout successful"}
 
 
 @router.patch("/{reg_number}/mispark", response_model=VehicleResponse)
