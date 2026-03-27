@@ -47,7 +47,16 @@ export async function login(email, password) {
   const response = await fetch(`${BASE_URL}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: email, password: password }),
+    body: JSON.stringify({ email, password }),
+  });
+  return handleResponse(response);
+}
+
+export async function register(payload) {
+  const response = await fetch(`${BASE_URL}/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
   });
   return handleResponse(response);
 }
@@ -70,6 +79,64 @@ export async function getZones() {
 
 export async function getRecommendation() {
     const response = await fetch(`${BASE_URL}/recommendation/`, { headers: getHeaders() });
+    return handleResponse(response);
+}
+
+export async function getMyVehicle() {
+    const response = await fetch(`${BASE_URL}/vehicles/my`, { headers: getHeaders() });
+    if (response.status === 404) return null;
+    return handleResponse(response);
+}
+
+export async function selfCheckout() {
+    const response = await fetch(`${BASE_URL}/vehicles/self-checkout`, {
+        method: 'POST',
+        headers: getHeaders(),
+    });
+    return handleResponse(response);
+}
+
+// ==========================================
+// BOOKINGS
+// ==========================================
+
+export async function createBooking(zone_name, vehicle_reg) {
+    const response = await fetch(`${BASE_URL}/bookings/`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ zone_name, vehicle_reg }),
+    });
+    return handleResponse(response);
+}
+
+export async function getMyBooking() {
+    const response = await fetch(`${BASE_URL}/bookings/my`, { headers: getHeaders() });
+    if (response.status === 204 || response.status === 200) {
+        const text = await response.text();
+        return text ? JSON.parse(text) : null;
+    }
+    return handleResponse(response);
+}
+
+export async function cancelMyBooking() {
+    const response = await fetch(`${BASE_URL}/bookings/my`, {
+        method: 'DELETE',
+        headers: getHeaders(),
+    });
+    if (response.status === 204) return;
+    return handleResponse(response);
+}
+
+export async function getAllBookings() {
+    const response = await fetch(`${BASE_URL}/bookings/`, { headers: getHeaders() });
+    return handleResponse(response);
+}
+
+export async function confirmBooking(id) {
+    const response = await fetch(`${BASE_URL}/bookings/${id}/confirm`, {
+        method: 'PATCH',
+        headers: getHeaders(),
+    });
     return handleResponse(response);
 }
 
@@ -96,19 +163,22 @@ export async function recordExit(regNumber) {
 }
 
 export async function searchVehicle(regNumber) {
-  const response = await fetch(`${BASE_URL}/vehicles/search?regNumber=${encodeURIComponent(regNumber)}`, {
+  const response = await fetch(`${BASE_URL}/vehicles/search?reg_number=${encodeURIComponent(regNumber)}`, {
     headers: getHeaders(),
   });
   return handleResponse(response);
 }
 
 export async function markMisParked(regNumber) {
-  const response = await fetch(`${ BASE_URL } /vehicles/${ encodeURIComponent(regNumber) }/mispark`, {
-method: 'PATCH',
+  const response = await fetch(`${BASE_URL}/vehicles/${encodeURIComponent(regNumber)}/mispark`, {
+    method: 'PATCH',
     headers: getHeaders(),
   });
-return handleResponse(response);
+  return handleResponse(response);
 }
+
+// lowercase alias used in EntryExit.jsx
+export const markMisparked = markMisParked;
 
 export async function getMisParked() {
     const response = await fetch(`${BASE_URL}/vehicles/misparked`, {
@@ -138,4 +208,89 @@ export async function getAnalytics() {
         headers: getHeaders(),
     });
     return handleResponse(response);
+}
+
+// ==========================================
+// FEATURE: ANPR — Plate Scanning
+// ==========================================
+
+export async function scanPlate(imageFile) {
+    const token = localStorage.getItem('token');
+    const formData = new FormData();
+    formData.append('file', imageFile);
+    const response = await fetch(`${BASE_URL}/vision/scan`, {
+        method: 'POST',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+        body: formData,
+    });
+    return handleResponse(response);
+}
+
+// ==========================================
+// FEATURE: Virtual Queue
+// ==========================================
+
+export async function joinQueue(zoneName) {
+    const response = await fetch(`${BASE_URL}/queue/join`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ zone_name: zoneName }),
+    });
+    return handleResponse(response);
+}
+
+export async function getQueueStatus() {
+    const response = await fetch(`${BASE_URL}/queue/my-status`, {
+        headers: getHeaders(),
+    });
+    return handleResponse(response);
+}
+
+export async function leaveQueue(zoneName) {
+    const response = await fetch(`${BASE_URL}/queue/leave/${encodeURIComponent(zoneName)}`, {
+        method: 'DELETE',
+        headers: getHeaders(),
+    });
+    if (!response.ok && response.status !== 204) {
+        throw new Error('Failed to leave queue');
+    }
+}
+
+// ==========================================
+// FEATURE: Heatmap Analytics
+// ==========================================
+
+export async function getHeatmap(zone = 'all') {
+    const response = await fetch(`${BASE_URL}/logs/heatmap?zone=${encodeURIComponent(zone)}`, {
+        headers: getHeaders(),
+    });
+    return handleResponse(response);
+}
+
+export async function getPrediction() {
+    const response = await fetch(`${BASE_URL}/logs/predict`, {
+        headers: getHeaders(),
+    });
+    return handleResponse(response);
+}
+
+// ==========================================
+// FEATURE: PDF Export
+// ==========================================
+
+export async function exportPdf() {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${BASE_URL}/logs/export-pdf`, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+    });
+    if (!response.ok) throw new Error('Export failed');
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'parking_report.pdf';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
 }
