@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.database import Base, engine
-from app.routers import auth, logs, recommendation, vehicles, zones
+from app.routers import auth, bookings, logs, queue, recommendation, vehicles, vision, zones
 
 # ---------- Create tables ----------
 Base.metadata.create_all(bind=engine)
@@ -30,6 +30,9 @@ app.include_router(zones.router, prefix=settings.API_PREFIX)
 app.include_router(vehicles.router, prefix=settings.API_PREFIX)
 app.include_router(logs.router, prefix=settings.API_PREFIX)
 app.include_router(recommendation.router, prefix=settings.API_PREFIX)
+app.include_router(vision.router, prefix=settings.API_PREFIX)
+app.include_router(queue.router, prefix=settings.API_PREFIX)
+app.include_router(bookings.router, prefix=settings.API_PREFIX)
 
 
 @app.get("/")
