@@ -1,6 +1,6 @@
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 
 
 class UserLogin(BaseModel):
@@ -13,6 +13,7 @@ class UserRegister(BaseModel):
     email: str
     password: str
     role: str  # "student", "guard", "manager"
+    vehicle_reg: Optional[str] = None
     student_id: Optional[str] = None
     guard_id: Optional[str] = None
     shift: Optional[str] = None
@@ -25,6 +26,7 @@ class UserResponse(BaseModel):
     name: str
     email: str
     role: str
+    vehicle_reg: Optional[str] = None
     student_id: Optional[str] = None
     guard_id: Optional[str] = None
     shift: Optional[str] = None

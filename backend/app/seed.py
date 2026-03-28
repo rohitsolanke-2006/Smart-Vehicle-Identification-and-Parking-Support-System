@@ -9,11 +9,12 @@ def seed():
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
 
-    # ---- Parking Zones (from Object Diagram) ----
+    # ---- Parking Zones (matched to satellite map zones, all start at 0 occupied) ----
     zones = [
-        ParkingZone(zone_name="Main Gate Parking", capacity=50, occupied=0),
-        ParkingZone(zone_name="Auditorium Parking", capacity=30, occupied=0),
-        ParkingZone(zone_name="Hostel Parking", capacity=40, occupied=0),
+        ParkingZone(zone_name="Zone A – 2-Wheeler Lot",  capacity=80,  occupied=0),
+        ParkingZone(zone_name="Zone B – Car Parking",    capacity=40,  occupied=0),
+        ParkingZone(zone_name="Zone C – Road-side 2W",   capacity=60,  occupied=0),
+        ParkingZone(zone_name="Zone D – Staff Parking",  capacity=30,  occupied=0),
     ]
     for zone in zones:
         existing = db.query(ParkingZone).filter(
