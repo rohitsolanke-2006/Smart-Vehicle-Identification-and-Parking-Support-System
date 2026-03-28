@@ -14,6 +14,9 @@ class User(Base):
     password_hash: str = Column(String(255), nullable=False)
     role: str = Column(String(20), nullable=False)  # "student" | "guard" | "manager"
 
+    # Identification
+    vehicle_reg: str = Column(String(30), nullable=True)   # e.g. MH12AB1234
+
     # Role-specific optional fields
     student_id: str = Column(String(50), nullable=True)
     guard_id: str = Column(String(50), nullable=True)
