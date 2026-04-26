@@ -35,8 +35,6 @@ function statusColor(pct) {
 
 export default function CampusMap({ zones = [] }) {
   const [tooltip, setTooltip] = useState(null);
-  const [pickerMode, setPickerMode] = useState(false);
-  const [pickerCoords, setPickerCoords] = useState(null);
   const svgRef = useRef(null);
 
   const zoneData = {};
@@ -63,13 +61,7 @@ export default function CampusMap({ zones = [] }) {
     });
   }
 
-  function handlePickerMove(e) {
-    if (!pickerMode || !svgRef.current) return;
-    const rect = svgRef.current.getBoundingClientRect();
-    const x = Math.round((e.clientX - rect.left) * (IMG_W / rect.width));
-    const y = Math.round((e.clientY - rect.top) * (IMG_H / rect.height));
-    setPickerCoords({ x, y });
-  }
+
 
   /** Renders a single interactive parking zone polygon */
   function Zone({ id, points, label, cx, cy, dashed = false, staff = false }) {
@@ -148,54 +140,20 @@ export default function CampusMap({ zones = [] }) {
       {/* ── HEADER ──────────────────────────────────────────── */}
       <div style={styles.header}>
         <h2 style={styles.title}>Live Campus Parking Map</h2>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
-        <button
-          onClick={() => { setPickerMode(p => !p); setPickerCoords(null); }}
-          style={{
-            background: pickerMode ? '#1e293b' : '#f1f5f9',
-            color: pickerMode ? '#ffffff' : '#64748b',
-            border: '1px solid #e2e8f0',
-            borderRadius: '7px',
-            padding: '5px 13px',
-            fontSize: '0.78rem',
-            fontWeight: '600',
-            cursor: 'pointer',
-            fontFamily: 'Inter, sans-serif',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {pickerMode ? 'Exit Picker' : 'Pick Coordinates'}
-        </button>
         <div style={styles.legend}>
           <LegendDot color="#6ee7b7" stroke="#059669" label="Available" />
           <LegendDot color="#fde68a" stroke="#d97706" label="Busy 60%+" />
           <LegendDot color="#fca5a5" stroke="#dc2626" label="Full 90%+" />
         </div>
-        </div>
       </div>
 
       {/* ── MAP ─────────────────────────────────────────────── */}
       <div style={styles.mapWrap}>
-        {pickerMode && pickerCoords && (
-          <div style={styles.coordBanner}>
-            x: <strong>{pickerCoords.x}</strong> &nbsp; y: <strong>{pickerCoords.y}</strong>
-            <span style={{ marginLeft: '10px', color: '#94a3b8', fontSize: '0.72rem' }}>
-              — hover corners of a parking area, then tell me each coordinate
-            </span>
-          </div>
-        )}
-        {pickerMode && !pickerCoords && (
-          <div style={{ ...styles.coordBanner, color: '#f59e0b' }}>
-            Picker active — hover over the parking spots on the map
-          </div>
-        )}
         <svg
           ref={svgRef}
           viewBox={`0 0 ${IMG_W} ${IMG_H}`}
-          style={{ ...styles.svg, cursor: pickerMode ? 'crosshair' : 'default' }}
+          style={styles.svg}
           xmlns="http://www.w3.org/2000/svg"
-          onMouseMove={handlePickerMove}
-          onMouseLeave={() => setPickerCoords(null)}
         >
           {/* Real satellite photo */}
           <image
@@ -227,7 +185,7 @@ export default function CampusMap({ zones = [] }) {
                        dashed stroke = road with parking on both sides, open centre) */}
           <Zone
             id="zoneC"
-            points="415,476 708,470 794,187 824,186 823,304 794,309 781,485 418,490"
+            points="415,476 748,470 794,187 824,186 823,304 794,309 781,485 418,490"
             label="Zone C · 2W Road"
             cx={700} cy={330}
             dashed={true}
@@ -242,28 +200,7 @@ export default function CampusMap({ zones = [] }) {
             staff={true}
           />
 
-          {/* Live crosshair in picker mode */}
-          {pickerMode && pickerCoords && (
-            <g style={{ pointerEvents: 'none' }}>
-              <line x1={pickerCoords.x} y1={0} x2={pickerCoords.x} y2={IMG_H} stroke="#f43f5e" strokeWidth="1" strokeDasharray="4 3" opacity="0.7" />
-              <line x1={0} y1={pickerCoords.y} x2={IMG_W} y2={pickerCoords.y} stroke="#f43f5e" strokeWidth="1" strokeDasharray="4 3" opacity="0.7" />
-              <circle cx={pickerCoords.x} cy={pickerCoords.y} r="5" fill="#f43f5e" opacity="0.9" />
-              <rect
-                x={Math.min(pickerCoords.x + 8, IMG_W - 120)}
-                y={Math.max(pickerCoords.y - 28, 4)}
-                width="112" height="24" rx="5"
-                fill="#1e293b" opacity="0.9"
-              />
-              <text
-                x={Math.min(pickerCoords.x + 14, IMG_W - 114)}
-                y={Math.max(pickerCoords.y - 11, 20)}
-                fontSize="12" fontWeight="700" fill="white"
-                fontFamily="Inter, monospace"
-              >
-                {pickerCoords.x}, {pickerCoords.y}
-              </text>
-            </g>
-          )}
+
 
           <Tooltip />
         </svg>
@@ -332,3 +269,7 @@ const styles = {
     display: 'block',
   },
 };
+
+// SCRUM-28: Added tooltip on hover for slot status
+
+// SCRUM-28: tooltip style update
