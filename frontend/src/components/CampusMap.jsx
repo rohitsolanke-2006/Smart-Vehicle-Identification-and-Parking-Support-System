@@ -271,3 +271,5 @@ const styles = {
 };
 
 // SCRUM-28: Added tooltip on hover for slot status
+
+// SCRUM-28: tooltip style update
