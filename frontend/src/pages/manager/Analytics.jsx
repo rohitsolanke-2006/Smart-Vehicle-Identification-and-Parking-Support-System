@@ -4,195 +4,164 @@ import HeatmapChart from '../../components/HeatmapChart';
 import { getHeatmap, getAnalytics, getZones, exportPdf, getPrediction } from '../../services/api';
 
 export default function Analytics() {
-  const [heatmapData,  setHeatmapData]  = useState(null);
-  const [analytics,    setAnalytics]    = useState(null);
-  const [prediction,   setPrediction]   = useState(null);
-  const [zones,        setZones]        = useState([]);
-  const [selectedZone, setSelectedZone] = useState('all');
-  const [loading,      setLoading]      = useState(true);
-  const [exporting,    setExporting]    = useState(false);
+  const [heatmap,   setHeatmap]   = useState(null);
+  const [analytics, setAnalytics] = useState(null);
+  const [prediction,setPrediction]= useState(null);
+  const [zones,     setZones]     = useState([]);
+  const [zone,      setZone]      = useState('all');
+  const [loading,   setLoading]   = useState(true);
+  const [exporting, setExporting] = useState(false);
 
-  const fetchData = async (zone = 'all') => {
+  const fetchData = async (z = 'all') => {
     setLoading(true);
     try {
-      const [hm, an, zn, pred] = await Promise.all([
-        getHeatmap(zone),
-        getAnalytics(),
-        getZones(),
-        getPrediction(),
-      ]);
-      setHeatmapData(hm);
-      setAnalytics(an);
-      setZones(zn);
-      setPrediction(pred);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
+      const [hm, an, zn, pred] = await Promise.all([getHeatmap(z), getAnalytics(), getZones(), getPrediction()]);
+      setHeatmap(hm); setAnalytics(an); setZones(zn); setPrediction(pred);
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
   };
 
   useEffect(() => { fetchData(); }, []);
 
-  const handleZoneChange = (e) => {
-    setSelectedZone(e.target.value);
-    fetchData(e.target.value);
-  };
+  const handleZone = (e) => { setZone(e.target.value); fetchData(e.target.value); };
+  const handleExport = async () => { setExporting(true); try { await exportPdf(); } finally { setExporting(false); } };
 
-  const handleExport = async () => {
-    setExporting(true);
-    try { await exportPdf(); }
-    finally { setExporting(false); }
-  };
+  const statCards = analytics ? [
+    { label: 'Total Entries',    value: analytics.total_entries,    color: '#2F81F7', icon: 'entries' },
+    { label: 'Total Exits',      value: analytics.total_exits,      color: '#3FB950', icon: 'exits'   },
+    { label: 'Currently Parked', value: analytics.currently_parked, color: '#D29922', icon: 'parked'  },
+    { label: 'Mis-Parked',       value: analytics.mis_parked_count, color: '#F85149', icon: 'mis'     },
+  ] : [];
 
   return (
     <div className="app-container" style={{ flexDirection: 'column' }}>
       <Navbar />
-      <main className="main-content" style={{ padding: '0 2rem 2rem' }}>
+      <main className="main-content animate-slide-up">
 
-        {/* ── Header ──────────────────────────────── */}
-        <div style={styles.header}>
+        <div className="page-header">
           <div>
-            <h1 style={styles.pageTitle}>📊 Parking Analytics</h1>
-            <p style={styles.pageSubtitle}>Traffic patterns, ML predictions, and zone performance insights.</p>
+            <div className="page-header__eyebrow">Manager Console</div>
+            <h1 className="page-header__title gradient-text">Parking Analytics</h1>
+            <p className="page-header__sub">ML predictions, traffic patterns, and zone performance.</p>
           </div>
-          <button onClick={handleExport} disabled={exporting} style={styles.exportBtn}>
-            {exporting ? 'Generating…' : '⬇️ Export PDF Report'}
+          <button className="btn-primary" style={{ width: 'auto', padding: '0.75rem 1.5rem' }}
+            onClick={handleExport} disabled={exporting}>
+            {exporting ? 'Generating…' : 'Export PDF Report'}
           </button>
         </div>
 
-        {/* ── Summary Cards ─────────────────────────_ */}
+        {/* ── Stat cards */}
         {analytics && (
-          <div style={styles.statsGrid}>
-            <StatCard label="Total Entries"     value={analytics.total_entries}    color="#3b82f6" icon="📥" />
-            <StatCard label="Total Exits"       value={analytics.total_exits}      color="#10b981" icon="📤" />
-            <StatCard label="Currently Parked"  value={analytics.currently_parked} color="#f59e0b" icon="🚗" />
-            <StatCard label="Mis-Parked"        value={analytics.mis_parked_count} color="#ef4444" icon="⚠️" />
+          <div style={s.statGrid}>
+            {statCards.map(c => (
+              <StatCard key={c.label} {...c} />
+            ))}
           </div>
         )}
 
-        {/* ── ML Prediction Chart ──────────────────── */}
-        {prediction && (
-          <div style={styles.card}>
-            <div style={styles.cardHeader}>
-              <div>
-                <h2 style={styles.cardTitle}>
-                  🤖 ML Occupancy Prediction — Today
-                </h2>
-                <p style={styles.cardSubtitle}>
-                  {prediction.source === 'historical'
-                    ? 'Trained on your real parking logs · 7×24 frequency matrix + 3-hr smoothing'
-                    : 'Synthetic college-day curve (will switch to real ML once logs accumulate)'}
-                  {' '}&nbsp;·&nbsp; Peak at <strong>{String(prediction.peak_hour).padStart(2,'0')}:00</strong>
-                  {' '}(<span style={{ color: riskColor(prediction.peak_risk), fontWeight: 700 }}>{prediction.peak_risk}</span>)
-                </p>
-              </div>
-              <span style={{ ...styles.mlBadge, background: prediction.source === 'historical' ? 'var(--status-green-light)' : 'var(--status-yellow-light)',
-                color: prediction.source === 'historical' ? '#166534' : '#92400e' }}>
-                {prediction.source === 'historical' ? '🟢 Live ML' : '🟡 Synthetic'}
-              </span>
-            </div>
-            <PredictionChart predictions={prediction.predictions} />
-          </div>
-        )}
-
-        {/* ── Activity Heatmap ─────────────────────── */}
-        <div style={styles.card}>
-          <div style={styles.cardHeader}>
-            <div>
-              <h2 style={styles.cardTitle}>Activity Heatmap</h2>
-              <p style={styles.cardSubtitle}>
-                Parking activity by day of week and hour — darker = busier
-              </p>
-            </div>
-            <select value={selectedZone} onChange={handleZoneChange} style={styles.select}>
-              <option value="all">All Zones</option>
-              {zones.map(z => (
-                <option key={z.id} value={z.zone_name}>{z.zone_name}</option>
-              ))}
-            </select>
-          </div>
-
-          {loading ? (
-            <div style={styles.loadingState}>Loading…</div>
-          ) : heatmapData ? (
-            <>
-              <HeatmapChart data={heatmapData} />
-              {heatmapData.peak.count > 0 && (
-                <div style={styles.peakBadge}>
-                  🔥 Busiest slot: <strong>{heatmapData.peak.day}</strong> at{' '}
-                  <strong>{String(heatmapData.peak.hour).padStart(2,'0')}:00</strong>
-                  {' '}({heatmapData.peak.count} events)
+        <div style={s.mainGrid}>
+          {/* ── ML Chart */}
+          {prediction && (
+            <div style={s.panel}>
+              <div style={s.panelHeader}>
+                <div>
+                  <div style={s.eyebrow}>Machine Learning</div>
+                  <h3 style={s.panelTitle}>Occupancy Prediction — Today</h3>
+                  <p style={s.panelSub}>
+                    {prediction.source === 'historical' ? 'Trained on real logs · 7×24 matrix + 3hr smoothing' : 'Synthetic data (accumulating logs for ML)'}
+                    {' · '}Peak <span style={{ color: riskColor(prediction.peak_risk), fontWeight: '700' }}>{String(prediction.peak_hour).padStart(2,'0')}:00</span>
+                  </p>
                 </div>
-              )}
-            </>
-          ) : null}
-        </div>
+                <span style={{ ...s.mlBadge, background: prediction.source === 'historical' ? 'rgba(63,185,80,0.1)' : 'rgba(210,153,34,0.1)', color: prediction.source === 'historical' ? '#3FB950' : '#D29922', border: `1px solid ${prediction.source === 'historical' ? 'rgba(63,185,80,0.25)' : 'rgba(210,153,34,0.25)'}` }}>
+                  {prediction.source === 'historical' ? 'Live ML' : 'Synthetic'}
+                </span>
+              </div>
+              <PredictionBar predictions={prediction.predictions} />
+            </div>
+          )}
 
-        {/* ── Zone Traffic Table ───────────────────── */}
-        {analytics && analytics.entries_per_zone.length > 0 && (
-          <div style={styles.card}>
-            <h2 style={styles.cardTitle}>Zone Traffic Breakdown</h2>
-            <div style={styles.tableWrapper}>
-              <table style={styles.table}>
+          {/* ── Zone traffic table */}
+          {analytics?.entries_per_zone?.length > 0 && (
+            <div style={s.panel}>
+              <div style={s.eyebrow}>Breakdown</div>
+              <h3 style={s.panelTitle}>Zone Traffic</h3>
+              <table className="data-table" style={{ marginTop: '1.25rem' }}>
                 <thead>
-                  <tr>
-                    <th style={styles.th}>Zone</th>
-                    <th style={styles.th}>Entries</th>
-                    <th style={styles.th}>Exits</th>
-                    <th style={styles.th}>Net Staying</th>
-                  </tr>
+                  <tr><th>Zone</th><th>Entries</th><th>Exits</th><th>Net</th></tr>
                 </thead>
                 <tbody>
                   {analytics.entries_per_zone.map(z => (
                     <tr key={z.zone_name}>
-                      <td style={styles.td}>{z.zone_name}</td>
-                      <td style={{ ...styles.td, color: '#3b82f6' }}>{z.entries}</td>
-                      <td style={{ ...styles.td, color: '#10b981' }}>{z.exits}</td>
-                      <td style={{ ...styles.td, fontWeight: '700' }}>{z.entries - z.exits}</td>
+                      <td style={{ fontWeight: '600' }}>{z.zone_name}</td>
+                      <td><span className="mono" style={{ color: '#2F81F7' }}>{z.entries}</span></td>
+                      <td><span className="mono" style={{ color: '#3FB950' }}>{z.exits}</span></td>
+                      <td><span className="mono" style={{ fontWeight: '800' }}>{z.entries - z.exits}</span></td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
+        {/* ── Heatmap */}
+        <div style={s.panel}>
+          <div style={s.panelHeader}>
+            <div>
+              <div style={s.eyebrow}>Activity Heatmap</div>
+              <h3 style={s.panelTitle}>Parking Activity by Time &amp; Day</h3>
+              <p style={s.panelSub}>Darker cells = higher activity. Identify peak hours at a glance.</p>
+            </div>
+            <select value={zone} onChange={handleZone} className="form-control" style={{ width: 'auto', padding: '0.6rem 2.5rem 0.6rem 1rem' }}>
+              <option value="all">All Zones</option>
+              {zones.map(z => <option key={z.id} value={z.zone_name}>{z.zone_name}</option>)}
+            </select>
+          </div>
+          {loading ? (
+            <div style={{ padding: '3rem', textAlign: 'center', color: '#484F58', fontFamily: 'JetBrains Mono, monospace', fontSize: '0.85rem' }} className="animate-pulse">Loading heatmap…</div>
+          ) : heatmap ? (
+            <>
+              <div style={{ background: 'rgba(0,0,0,0.25)', borderRadius: '10px', padding: '1.25rem', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <HeatmapChart data={heatmap} />
+              </div>
+              {heatmap.peak.count > 0 && (
+                <div style={{ marginTop: '1rem', padding: '0.75rem 1rem', background: 'rgba(210,153,34,0.08)', border: '1px solid rgba(210,153,34,0.2)', borderRadius: '8px', fontSize: '0.85rem', color: '#D29922' }}>
+                  Peak slot: <strong>{heatmap.peak.day}</strong> at <strong>{String(heatmap.peak.hour).padStart(2,'0')}:00</strong> — {heatmap.peak.count} events
+                </div>
+              )}
+            </>
+          ) : null}
+        </div>
       </main>
     </div>
   );
 }
 
-/* ── ML Prediction Bar Chart ─────────────────────────── */
-function PredictionChart({ predictions }) {
-  const maxVal = Math.max(...predictions.map(p => p.predicted_occupancy), 1);
+/* ── ML Bar Chart */
+function PredictionBar({ predictions }) {
+  const max = Math.max(...predictions.map(p => p.predicted_occupancy), 1);
   return (
-    <div style={styles.chartWrapper}>
-      <div style={styles.chartBars}>
+    <div style={{ overflowX: 'auto', paddingTop: '1rem' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: '4px', height: '160px', minWidth: '500px' }}>
         {predictions.map(p => (
-          <div key={p.hour} style={styles.barContainer}>
-            <div
-              title={`${String(p.hour).padStart(2,'0')}:00 — ${p.predicted_occupancy}% (${p.risk})`}
-              style={{
-                ...styles.bar,
-                height: `${Math.max(4, (p.predicted_occupancy / maxVal) * 100)}%`,
-                background: riskColor(p.risk),
-              }}
-            />
-            {p.hour % 3 === 0 && (
-              <span style={styles.barLabel}>
-                {String(p.hour).padStart(2,'0')}h
-              </span>
-            )}
+          <div key={p.hour} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}>
+            <div title={`${String(p.hour).padStart(2,'0')}:00 — ${p.predicted_occupancy}% (${p.risk})`}
+              style={{ width: '100%', maxWidth: '14px', minHeight: '4px', borderRadius: '3px 3px 0 0',
+                height: `${Math.max(3, (p.predicted_occupancy / max) * 100)}%`,
+                background: riskColor(p.risk), transition: 'height 0.5s ease',
+                boxShadow: `0 0 8px ${riskColor(p.risk)}50`,
+              }} />
+            {p.hour % 6 === 0 && <div style={{ fontSize: '9px', color: '#484F58', marginTop: '6px', fontFamily: 'JetBrains Mono, monospace' }}>{String(p.hour).padStart(2,'0')}h</div>}
           </div>
         ))}
       </div>
-      <div style={styles.legend}>
-        {[['LOW','var(--status-green)'],['MEDIUM','var(--status-yellow)'],['HIGH','#f97316'],['PEAK','var(--status-red)']].map(([label, color]) => (
-          <span key={label} style={styles.legendItem}>
-            <span style={{ ...styles.legendDot, background: color }} />
-            {label}
-          </span>
+      {/* Legend */}
+      <div style={{ display: 'flex', gap: '1.25rem', marginTop: '1.25rem', flexWrap: 'wrap' }}>
+        {[['LOW','#3FB950'],['MEDIUM','#D29922'],['HIGH','#FB8500'],['PEAK','#F85149']].map(([label, color]) => (
+          <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
+            <div style={{ width: 10, height: 10, borderRadius: '50%', background: color, boxShadow: `0 0 6px ${color}` }} />
+            <span style={{ fontSize: '0.72rem', fontWeight: '700', letterSpacing: '0.07em', color: '#8B949E', textTransform: 'uppercase' }}>{label}</span>
+          </div>
         ))}
       </div>
     </div>
@@ -200,226 +169,39 @@ function PredictionChart({ predictions }) {
 }
 
 function riskColor(risk) {
-  if (risk === 'PEAK')   return 'var(--status-red)';
-  if (risk === 'HIGH')   return '#f97316';
-  if (risk === 'MEDIUM') return 'var(--status-yellow)';
-  return 'var(--status-green)';
+  if (risk === 'PEAK')   return '#F85149';
+  if (risk === 'HIGH')   return '#FB8500';
+  if (risk === 'MEDIUM') return '#D29922';
+  return '#3FB950';
 }
 
 function StatCard({ label, value, color, icon }) {
+  const icons = {
+    entries: <path d="M12 5v14M5 12l7-7 7 7"/>,
+    exits:   <path d="M12 19V5M19 12l-7 7-7-7"/>,
+    parked:  <><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="7" cy="15" r="2"/><circle cx="17" cy="15" r="2"/><path d="M15 11V7a4 4 0 0 0-8 0v4"/></>,
+    mis:     <><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></>,
+  };
+
   return (
-    <div style={{ ...styles.statCard, borderTop: `3px solid ${color}` }}>
-      <div style={styles.statIcon}>{icon}</div>
-      <div style={{ ...styles.statValue, color }}>{value}</div>
-      <div style={styles.statLabel}>{label}</div>
+    <div style={{ ...s.statCard, borderTop: `2px solid ${color}` }}>
+      <div style={{ position: 'absolute', top: '1.25rem', right: '1.25rem', opacity: 0.1 }}>
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{icons[icon]}</svg>
+      </div>
+      <div style={{ fontSize: '2.25rem', fontWeight: '800', letterSpacing: '-0.05em', lineHeight: '1', color, fontFamily: 'Inter, sans-serif', marginBottom: '0.5rem' }}>{value ?? '—'}</div>
+      <div style={{ fontSize: '0.78rem', fontWeight: '600', letterSpacing: '0.07em', textTransform: 'uppercase', color: '#484F58' }}>{label}</div>
     </div>
   );
 }
 
-const styles = {
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: '2rem',
-    flexWrap: 'wrap',
-    gap: '1rem',
-  },
-  pageTitle: {
-    fontSize: '2rem',
-    fontWeight: '700',
-    marginBottom: '0.25rem',
-    color: 'var(--text-main)',
-    letterSpacing: '-0.02em',
-  },
-  pageSubtitle: {
-    color: 'var(--text-muted)',
-    margin: 0,
-    fontSize: '1rem',
-  },
-  statsGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-    gap: '1rem',
-    marginBottom: '2rem',
-  },
-  statCard: {
-    background: 'var(--bg-card)',
-    border: '1px solid var(--border-color)',
-    borderRadius: 'var(--radius-md)',
-    padding: '1.25rem',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '0.25rem',
-    transition: 'all var(--transition-fast)',
-  },
-  statIcon: {
-    fontSize: '1.75rem',
-    marginBottom: '0.25rem',
-  },
-  statValue: {
-    fontSize: '2.25rem',
-    fontWeight: '800',
-    fontFamily: 'Inter, sans-serif',
-    letterSpacing: '-0.02em',
-  },
-  statLabel: {
-    fontSize: '0.85rem',
-    color: 'var(--text-muted)',
-    fontWeight: '500',
-    marginTop: '0.25rem',
-  },
-  card: {
-    background: 'var(--bg-card)',
-    border: '1px solid var(--border-color)',
-    borderRadius: 'var(--radius-lg)',
-    padding: '1.5rem',
-    marginBottom: '1.5rem',
-    boxShadow: 'var(--shadow-sm)',
-  },
-  cardHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: '1.5rem',
-    flexWrap: 'wrap',
-    gap: '0.75rem',
-  },
-  cardTitle: {
-    margin: 0,
-    fontSize: '1.15rem',
-    fontWeight: '700',
-    color: 'var(--text-main)',
-    marginBottom: '0.25rem',
-  },
-  cardSubtitle: {
-    margin: 0,
-    fontSize: '0.85rem',
-    color: 'var(--text-muted)',
-    lineHeight: '1.5',
-  },
-  select: {
-    border: '1px solid var(--border-color)',
-    borderRadius: 'var(--radius-sm)',
-    padding: '0.5rem 2rem 0.5rem 0.75rem',
-    fontSize: '0.9rem',
-    background: 'var(--bg-card)',
-    color: 'var(--text-main)',
-    cursor: 'pointer',
-    fontFamily: 'Inter, sans-serif',
-    fontWeight: '500',
-  },
-  exportBtn: {
-    background: 'var(--primary)',
-    color: '#fff',
-    border: 'none',
-    borderRadius: 'var(--radius-md)',
-    padding: '0.75rem 1.5rem',
-    fontSize: '0.9rem',
-    fontWeight: '600',
-    cursor: 'pointer',
-    fontFamily: 'Inter, sans-serif',
-    transition: 'all var(--transition-fast)',
-    whiteSpace: 'nowrap',
-  },
-  mlBadge: {
-    padding: '0.375rem 0.875rem',
-    borderRadius: 'var(--radius-xl)',
-    fontSize: '0.75rem',
-    fontWeight: '700',
-    whiteSpace: 'nowrap',
-  },
-  loadingState: {
-    padding: '3rem',
-    textAlign: 'center',
-    color: 'var(--text-muted)',
-  },
-  peakBadge: {
-    marginTop: '1rem',
-    padding: '0.75rem 1rem',
-    background: 'var(--status-yellow-light)',
-    border: '1px solid #fde047',
-    borderRadius: 'var(--radius-md)',
-    fontSize: '0.875rem',
-    color: '#713f12',
-    fontWeight: '500',
-  },
-  chartWrapper: {
-    overflowX: 'auto',
-  },
-  chartBars: {
-    display: 'flex',
-    alignItems: 'flex-end',
-    gap: '3px',
-    height: '140px',
-    padding: '0 4px',
-  },
-  barContainer: {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    height: '100%',
-    justifyContent: 'flex-end',
-  },
-  bar: {
-    width: '100%',
-    borderRadius: 'var(--radius-sm) var(--radius-sm) 0 0',
-    transition: 'height 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-    cursor: 'pointer',
-    opacity: 0.85,
-    minHeight: '4px',
-  },
-  barLabel: {
-    fontSize: '9px',
-    color: 'var(--text-muted)',
-    marginTop: '4px',
-    whiteSpace: 'nowrap',
-    fontWeight: '500',
-  },
-  legend: {
-    display: 'flex',
-    gap: '1.5rem',
-    marginTop: '1rem',
-    flexWrap: 'wrap',
-  },
-  legendItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.375rem',
-    fontSize: '0.75rem',
-    color: 'var(--text-muted)',
-    fontWeight: '500',
-  },
-  legendDot: {
-    width: '10px',
-    height: '10px',
-    borderRadius: '2px',
-    display: 'inline-block',
-  },
-  tableWrapper: {
-    overflowX: 'auto',
-  },
-  table: {
-    width: '100%',
-    borderCollapse: 'collapse',
-    fontSize: '0.9rem',
-  },
-  th: {
-    textAlign: 'left',
-    padding: '0.75rem 1rem',
-    background: 'var(--bg-main)',
-    borderBottom: '2px solid var(--border-color)',
-    color: 'var(--text-muted)',
-    fontWeight: '600',
-    fontSize: '0.8rem',
-    textTransform: 'uppercase',
-    letterSpacing: '0.04em',
-  },
-  td: {
-    padding: '1rem',
-    color: 'var(--text-main)',
-    borderBottom: '1px solid var(--border-light)',
-    fontWeight: '600',
-  },
+const s = {
+  statGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' },
+  statCard: { position: 'relative', background: 'rgba(13,17,23,0.7)', backdropFilter: 'blur(32px)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '14px', padding: '1.5rem', overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.3)' },
+  mainGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '1.5rem', marginBottom: '1.5rem' },
+  panel: { background: 'rgba(13,17,23,0.7)', backdropFilter: 'blur(32px)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '14px', padding: '1.5rem', marginBottom: '1.5rem', boxShadow: '0 2px 8px rgba(0,0,0,0.3)' },
+  panelHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.25rem' },
+  eyebrow: { fontSize: '0.7rem', fontWeight: '700', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#484F58', marginBottom: '0.3rem' },
+  panelTitle: { fontSize: '1.05rem', fontWeight: '700', color: '#F0F6FC', letterSpacing: '-0.025em', margin: '0 0 0.25rem', fontFamily: 'Inter, sans-serif' },
+  panelSub: { fontSize: '0.82rem', color: '#8B949E', margin: 0 },
+  mlBadge: { padding: '0.3rem 0.875rem', borderRadius: '9999px', fontSize: '0.72rem', fontWeight: '800', letterSpacing: '0.07em', textTransform: 'uppercase', flexShrink: 0, alignSelf: 'flex-start' },
 };

@@ -15,8 +15,8 @@ from app.services.auth_service import require_role, get_current_user
 
 router = APIRouter(prefix="/vehicles", tags=["Vehicles"])
 
-def _auto_checkout_stale(db: Session, max_minutes: int = 10):
-    """Auto-vacate vehicles parked longer than 10 minutes (for demo)."""
+def _auto_checkout_stale(db: Session, max_minutes: int = 120):
+    """Auto-vacate vehicles parked longer than 2 hours (realistic max-stay policy)."""
     threshold = datetime.utcnow() - timedelta(minutes=max_minutes)
     stale = db.query(Vehicle).filter(Vehicle.entry_time <= threshold).all()
     for v in stale:

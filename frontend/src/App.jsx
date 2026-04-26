@@ -13,6 +13,7 @@ import StudentDashboard from './pages/student/Dashboard';
 function App() {
   return (
     <AuthProvider>
+      <div className="app-bg"></div>
       <BrowserRouter>
         <Routes>
           {/* Public Login Route */}

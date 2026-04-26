@@ -2,156 +2,136 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { createBooking, getMyBooking, cancelMyBooking } from '../services/api';
 
-/**
- * BookingPanel — theatre-style spot grid for students.
- * Shows free / booked / occupied slots. Student can book one slot per zone.
- */
 export default function BookingPanel({ zones, onBooked }) {
   const { user } = useAuth();
   const [myBooking,  setMyBooking]  = useState(null);
-  const [loading,    setLoading]    = useState(true);   // only true on first mount
+  const [loading,    setLoading]    = useState(true);
   const [actionZone, setActionZone] = useState(null);
-  const [message,    setMessage]    = useState({ text: '', type: '' });
+  const [msg,        setMsg]        = useState(null); // { text, type }
 
-  // Initial load
   useEffect(() => {
     if (!user || user.role !== 'student') { setLoading(false); return; }
-    getMyBooking()
-      .then(b  => setMyBooking(b))
-      .catch(() => setMyBooking(null))
-      .finally(() => setLoading(false));
+    getMyBooking().then(b => setMyBooking(b)).catch(() => setMyBooking(null)).finally(() => setLoading(false));
   }, [user]);
 
-  // Silent re-sync whenever parent refreshes zones (every 5 s)
   useEffect(() => {
     if (!user || user.role !== 'student' || loading) return;
-    getMyBooking()
-      .then(b  => setMyBooking(b))
-      .catch(() => {});
-  }, [zones]); // eslint-disable-line react-hooks/exhaustive-deps
+    getMyBooking().then(b => setMyBooking(b)).catch(() => {});
+  }, [zones]); // eslint-disable-line
 
-  if (!user || user.role !== 'student') return null;
+  if (!user || user.role !== 'student' || loading) return null;
 
-  const msg = (text, type = 'error') => {
-    setMessage({ text, type });
-    setTimeout(() => setMessage({ text: '', type: '' }), 5000);
-  };
+  const flash = (text, type) => { setMsg({ text, type }); setTimeout(() => setMsg(null), 5000); };
 
   const handleBook = async (zone) => {
     setActionZone(zone.zone_name);
     try {
       const booking = await createBooking(zone.zone_name, user.vehicle_reg);
       setMyBooking(booking);
-      msg(`Spot booked in ${zone.zone_name}! You have 2 hours to arrive.`, 'success');
-      onBooked?.();   // trigger parent zones refresh
-    } catch (err) {
-      msg(err.message || 'Booking failed.');
-    } finally { setActionZone(null); }
+      flash(`Spot reserved in ${zone.zone_name}. You have 2 hours to arrive.`, 'success');
+      onBooked?.();
+    } catch (e) { flash(e.message || 'Booking failed.', 'error'); }
+    finally { setActionZone(null); }
   };
 
   const handleCancel = async () => {
     setActionZone('cancel');
     try {
-      await cancelMyBooking();
-      setMyBooking(null);
-      msg('Booking cancelled — spot released.', 'info');
+      await cancelMyBooking(); setMyBooking(null);
+      flash('Reservation cancelled — spot released.', 'info');
       onBooked?.();
-    } catch (err) {
-      msg(err.message || 'Cancellation failed.');
-    } finally { setActionZone(null); }
+    } catch (e) { flash(e.message || 'Cancellation failed.', 'error'); }
+    finally { setActionZone(null); }
   };
-
-  if (loading) return null;
 
   const expiresIn = myBooking
     ? Math.max(0, Math.round((new Date(myBooking.expires_at + 'Z') - new Date()) / 60000))
     : 0;
 
+  const expirePct = myBooking ? Math.min(100, Math.round((1 - expiresIn / 120) * 100)) : 0;
+
   return (
-    <div style={styles.wrapper}>
-      <div style={styles.header}>
+    <div style={s.wrapper}>
+      <div style={s.header}>
         <div>
-          <h2 style={styles.title}>Pre-Book a Spot</h2>
-          <p style={styles.subtitle}>
-            Reserve a spot now — holds for <strong>2 hours</strong>. Guard sees your booking instantly.
-          </p>
+          <div style={s.eyebrow}>Pre-Booking</div>
+          <h2 style={s.title}>Reserve a Parking Spot</h2>
+          <p style={s.sub}>Secures a spot for <strong style={{ color: '#F0F6FC' }}>2 hours</strong>. Guard sees your booking instantly.</p>
         </div>
         {myBooking && (
-          <div style={styles.activePill}>
-            <span style={styles.pulseDot} />
-            Booked · {expiresIn}m left
+          <div style={s.activePill}>
+            <span className="live-dot" />
+            Reserved · {expiresIn}m left
           </div>
         )}
       </div>
 
       {/* Alert */}
-      {message.text && (
-        <div style={{
-          ...styles.alert,
-          background: message.type === 'success' ? 'var(--status-green-light)' : message.type === 'info' ? 'var(--accent-light)' : 'var(--status-red-light)',
-          color: message.type === 'success' ? '#166534' : message.type === 'info' ? '#1e40af' : '#991b1b',
-          border: `1px solid ${message.type === 'success' ? '#86efac' : message.type === 'info' ? '#93c5fd' : '#fca5a5'}`,
-        }}>
-          {message.text}
+      {msg && (
+        <div className={`alert alert--${msg.type}`} style={{ marginBottom: '1.5rem' }}>
+          {msg.text}
         </div>
       )}
 
-      {/* Active booking card */}
+      {/* Active booking view */}
       {myBooking && (
-        <div style={styles.bookingCard}>
-          <div style={styles.bookingHeader}>
-            <span style={styles.bookingLabel}>Active Reservation</span>
+        <div style={s.bookingCard}>
+          {/* Timer bar */}
+          <div style={s.timerTrack}>
+            <div style={{ ...s.timerFill, width: `${expirePct}%`, background: expiresIn < 20 ? '#F85149' : '#2F81F7' }} />
           </div>
-          <div style={styles.bookingDetails}>
-            <BookDetail label="Zone" value={myBooking.zone_name} />
-            <BookDetail label="Expires" value={`in ${expiresIn} minutes`} />
-            <BookDetail label="Plate/Vehicle" value={myBooking.vehicle_reg || '—'} />
-            <BookDetail label="Status" value="PENDING · Guard notified" />
+
+          <div style={s.bookingBody}>
+            <div style={s.bookingGrid}>
+              <BookDetail label="Zone"       value={myBooking.zone_name} />
+              <BookDetail label="Expires In" value={`${expiresIn} min`} valueColor={expiresIn < 20 ? '#F85149' : undefined} />
+              <BookDetail label="Vehicle"    value={myBooking.vehicle_reg || 'Guest'} mono />
+              <BookDetail label="Status"     value="Guard Notified" valueColor="#3FB950" />
+            </div>
+
+            <button onClick={handleCancel} disabled={actionZone === 'cancel'} style={s.cancelBtn}>
+              {actionZone === 'cancel' ? 'Releasing...' : 'Cancel Reservation'}
+            </button>
           </div>
-          <button onClick={handleCancel} disabled={actionZone === 'cancel'} style={styles.cancelBtn}>
-            {actionZone === 'cancel' ? 'Processing…' : '✕ Cancel Booking'}
-          </button>
         </div>
       )}
 
-      {/* Zone grid — shown only when no active booking exists */}
+      {/* Zone picker grid */}
       {!myBooking && (
-        <div style={styles.grid}>
+        <div style={s.zoneGrid}>
           {zones.map(zone => {
-            const pct   = zone.occupancy_percent ?? Math.round(((zone.occupied ?? 0) / zone.capacity) * 100);
-            const free  = zone.free_space ?? (zone.capacity - (zone.occupied ?? 0));
-            const isFull = free <= 0;
-            const color  = pct >= 90 ? 'var(--status-red)' : pct >= 60 ? 'var(--status-yellow)' : 'var(--status-green)';
-            const colorLight = pct >= 90 ? 'var(--status-red-light)' : pct >= 60 ? 'var(--status-yellow-light)' : 'var(--status-green-light)';
+            const pct  = zone.occupancy_percent ?? Math.round(((zone.occupied ?? 0) / zone.capacity) * 100);
+            const free = zone.free_space ?? (zone.capacity - (zone.occupied ?? 0));
+            const full = free <= 0;
+            const color = pct >= 90 ? '#F85149' : pct >= 60 ? '#D29922' : '#3FB950';
+            const colorDim = pct >= 90 ? 'rgba(248,81,73,0.1)' : pct >= 60 ? 'rgba(210,153,34,0.1)' : 'rgba(63,185,80,0.1)';
+            const colorBorder = pct >= 90 ? 'rgba(248,81,73,0.2)' : pct >= 60 ? 'rgba(210,153,34,0.2)' : 'rgba(63,185,80,0.2)';
+            const isBusy = actionZone === zone.zone_name;
 
             return (
-              <div key={zone.id} style={{ ...styles.zoneCard, borderColor: color, background: colorLight }}>
+              <div key={zone.id} style={{ ...s.zoneCard, borderColor: colorBorder }}>
                 {/* Header */}
-                <div style={styles.zoneHeader}>
-                  <span style={styles.zoneName}>{zone.zone_name || zone.name}</span>
-                  <span style={{ ...styles.pill, background: color, opacity: isFull ? 1 : 0.9 }}>
-                    {isFull ? 'FULL' : 'OPEN'}
+                <div style={s.zoneHeader}>
+                  <span style={s.zoneCardName}>{zone.zone_name || zone.name}</span>
+                  <span style={{ ...s.zoneStatus, color, background: colorDim, border: `1px solid ${colorBorder}` }}>
+                    {full ? 'FULL' : 'OPEN'}
                   </span>
                 </div>
 
-                {/* Seat grid — visual representation */}
-                <SeatGrid total={zone.capacity} occupied={zone.occupied ?? 0} color={color} />
+                {/* Seat dots */}
+                <SeatMap total={zone.capacity} occupied={zone.occupied ?? 0} color={color} />
 
-                <div style={styles.zoneFooter}>
-                  <span style={styles.zoneCount}>
-                    <strong style={{ color }}>{free}</strong> / {zone.capacity} free
+                {/* Footer */}
+                <div style={s.zoneFooter}>
+                  <span style={{ fontSize: '0.8rem', color: '#8B949E' }}>
+                    <span style={{ color, fontSize: '1.1rem', fontWeight: '800', fontFamily: 'Inter, sans-serif' }}>{free}</span>
+                    /{zone.capacity} free
                   </span>
                   <button
+                    disabled={full || isBusy}
                     onClick={() => handleBook(zone)}
-                    disabled={isFull || actionZone === zone.zone_name}
-                    style={{
-                      ...styles.bookBtn,
-                      background: isFull ? 'var(--border-light)' : 'var(--primary)',
-                      color: isFull ? 'var(--text-muted)' : '#fff',
-                      cursor: isFull ? 'not-allowed' : 'pointer',
-                      opacity: actionZone === zone.zone_name ? 0.7 : 1,
-                    }}>
-                    {actionZone === zone.zone_name ? 'Booking…' : isFull ? 'Full' : 'Book Now'}
+                    style={full ? s.bookBtnDisabled : s.bookBtn}>
+                                {isBusy ? 'Booking...' : full ? 'Full' : 'Book'}
                   </button>
                 </div>
               </div>
@@ -163,228 +143,101 @@ export default function BookingPanel({ zones, onBooked }) {
   );
 }
 
-/* ── Seat Grid — like a theatre ──────────────────────────── */
-function SeatGrid({ total, occupied, color }) {
-  // Cap display to max 40 seats for visual clarity
-  const display = Math.min(total, 40);
-  const scale   = total > 40 ? total / 40 : 1;
-  const occDisp = Math.round(occupied / scale);
-
+function SeatMap({ total, occupied, color }) {
+  const cap = Math.min(total, 36);
+  const scale = total > 36 ? total / 36 : 1;
+  const occ = Math.round(occupied / scale);
   return (
-    <div style={styles.seatGrid}>
-      {Array.from({ length: display }).map((_, i) => {
-        const isOccupied = i < occDisp;
-        return (
-          <div key={i} title={isOccupied ? 'Occupied' : 'Free'} style={{
-            ...styles.seat,
-            background: isOccupied ? color : 'var(--border-light)',
-            boxShadow: isOccupied ? `0 1px 3px ${color}40` : 'none',
-          }} />
-        );
-      })}
-      {total > 40 && (
-        <span style={styles.seatOverflow}>+{total - 40}</span>
-      )}
+    <div style={sm.grid}>
+      {Array.from({ length: cap }).map((_, i) => (
+        <div key={i} style={{
+          ...sm.dot,
+          background: i < occ ? color : 'rgba(255,255,255,0.05)',
+          boxShadow: i < occ ? `0 0 6px ${color}60` : 'none',
+          border: i < occ ? 'none' : '1px solid rgba(255,255,255,0.07)',
+        }} />
+      ))}
+      {total > 36 && <span style={sm.more}>+{total - 36}</span>}
     </div>
   );
 }
 
-function BookDetail({ label, value }) {
+const sm = {
+  grid: { display: 'flex', flexWrap: 'wrap', gap: '5px', padding: '0.875rem 1rem', background: 'rgba(0,0,0,0.2)', borderTop: '1px solid rgba(255,255,255,0.04)', borderBottom: '1px solid rgba(255,255,255,0.04)' },
+  dot: { width: '14px', height: '14px', borderRadius: '4px', transition: 'all 0.3s ease' },
+  more: { fontSize: '0.7rem', color: '#484F58', alignSelf: 'center', marginLeft: '4px', fontFamily: 'JetBrains Mono, monospace' },
+};
+
+function BookDetail({ icon, label, value, valueColor, mono }) {
   return (
-    <div style={styles.detailItem}>
-      <span style={styles.detailLabel}>{label}</span>
-      <span style={styles.detailValue}>{value}</span>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+      <div style={{ fontSize: '0.72rem', fontWeight: '700', letterSpacing: '0.08em', textTransform: 'uppercase', color: '#484F58' }}>{label}</div>
+      <div style={{ fontSize: '1rem', fontWeight: '700', color: valueColor || '#F0F6FC', fontFamily: mono ? 'JetBrains Mono, monospace' : 'Inter, sans-serif', letterSpacing: mono ? '0.04em' : '-0.01em' }}>{value}</div>
     </div>
   );
 }
 
-const styles = {
+const s = {
   wrapper: {
-    background: 'var(--bg-card)',
-    backdropFilter: 'blur(20px)',
-    WebkitBackdropFilter: 'blur(20px)',
-    border: '1px solid var(--border-color)',
-    borderRadius: 'var(--radius-xl)',
-    padding: '1.5rem',
-    marginBottom: '2.5rem',
-    boxShadow: 'var(--shadow-md)',
+    background: 'rgba(13,17,23,0.7)',
+    backdropFilter: 'blur(32px)', WebkitBackdropFilter: 'blur(32px)',
+    border: '1px solid rgba(255,255,255,0.07)',
+    borderRadius: '16px', overflow: 'hidden',
+    boxShadow: '0 4px 24px rgba(0,0,0,0.4)',
   },
   header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    flexWrap: 'wrap',
-    gap: '1rem',
-    marginBottom: '1.5rem',
+    display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+    flexWrap: 'wrap', gap: '1rem',
+    padding: '1.5rem 1.5rem 1.25rem',
+    borderBottom: '1px solid rgba(255,255,255,0.05)',
   },
-  title: {
-    margin: 0,
-    fontSize: '1.4rem',
-    fontWeight: '700',
-    color: 'var(--text-main)',
-    fontFamily: 'Space Grotesk, sans-serif',
-  },
-  subtitle: {
-    margin: '0.25rem 0 0',
-    fontSize: '0.9rem',
-    color: 'var(--text-muted)',
-  },
+  eyebrow: { fontSize: '0.7rem', fontWeight: '700', letterSpacing: '0.12em', textTransform: 'uppercase', color: '#2F81F7', marginBottom: '0.375rem' },
+  title: { fontSize: '1.15rem', fontWeight: '700', color: '#F0F6FC', letterSpacing: '-0.025em', marginBottom: '0.25rem', fontFamily: 'Inter, sans-serif' },
+  sub: { fontSize: '0.85rem', color: '#8B949E', margin: 0 },
   activePill: {
-    display: 'flex',
-    alignItems: 'center',
-    background: 'rgba(16, 185, 129, 0.05)',
-    color: 'var(--status-green)',
-    border: '1px solid rgba(16, 185, 129, 0.2)',
-    borderRadius: '4px',
-    padding: '0.375rem 1rem',
-    fontSize: '0.85rem',
-    fontWeight: '500',
-    gap: '0.5rem',
+    display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
+    padding: '0.4rem 0.875rem', borderRadius: '9999px',
+    background: 'rgba(63,185,80,0.08)', border: '1px solid rgba(63,185,80,0.2)',
+    fontSize: '0.78rem', fontWeight: '700', color: '#3FB950',
+    fontFamily: 'Inter, sans-serif', alignSelf: 'flex-start',
   },
-  pulseDot: {
-    width: 8,
-    height: 8,
-    borderRadius: '50%',
-    background: 'var(--status-green)',
-    animation: 'pulseGlow 2s ease-in-out infinite',
-  },
-  alert: {
-    padding: '1rem',
-    borderRadius: 'var(--radius-md)',
-    fontSize: '0.9rem',
-    marginBottom: '1.5rem',
-    fontWeight: '500',
-  },
-  bookingCard: {
-    background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.4) 100%)',
-    border: '1px solid rgba(255, 255, 255, 0.1)',
-    borderRadius: 'var(--radius-lg)',
-    padding: '1.5rem',
-    marginBottom: '1rem',
-    boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.05)',
-  },
-  bookingHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-    marginBottom: '1rem',
-    paddingBottom: '0.75rem',
-    borderBottom: '1px solid var(--border-light)',
-  },
-  bookingLabel: {
-    fontSize: '1.05rem',
-    fontWeight: '700',
-    color: 'var(--text-main)',
-    fontFamily: 'Space Grotesk, sans-serif',
-  },
-  bookingDetails: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
-    gap: '1.5rem',
-    marginBottom: '1.5rem',
-  },
+  bookingCard: { overflow: 'hidden' },
+  timerTrack: { height: '3px', background: 'rgba(255,255,255,0.06)' },
+  timerFill: { height: '100%', transition: 'width 1s linear, background 0.5s ease' },
+  bookingBody: { padding: '1.5rem' },
+  bookingGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1.5rem', marginBottom: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid rgba(255,255,255,0.05)' },
   cancelBtn: {
-    padding: '0.625rem 1.25rem',
-    borderRadius: '4px',
-    border: '1px solid rgba(239, 68, 68, 0.2)',
-    background: 'rgba(239, 68, 68, 0.05)',
-    color: '#f87171',
-    fontWeight: '500',
-    cursor: 'pointer',
-    fontFamily: 'Outfit, sans-serif',
-    fontSize: '0.85rem',
-    transition: 'all var(--transition-fast)',
+    display: 'inline-flex', alignItems: 'center', gap: '0.375rem',
+    padding: '0.625rem 1.25rem', borderRadius: '8px',
+    background: 'rgba(248,81,73,0.07)', color: '#F85149',
+    border: '1px solid rgba(248,81,73,0.2)',
+    fontSize: '0.85rem', fontWeight: '600', cursor: 'pointer',
+    fontFamily: 'Inter, sans-serif', transition: 'all 0.15s ease',
   },
-  grid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
-    gap: '1.5rem',
-  },
+  zoneGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '1px', background: 'rgba(255,255,255,0.05)' },
   zoneCard: {
-    border: '2px solid',
-    borderRadius: 'var(--radius-lg)',
-    padding: '1.25rem',
-    transition: 'all var(--transition-fast)',
-    cursor: 'default',
-    background: 'transparent',
-    backdropFilter: 'blur(10px)',
+    background: 'rgba(8,12,18,0.8)',
+    border: '1px solid transparent',
+    overflow: 'hidden',
+    transition: 'background 0.2s ease',
   },
-  zoneHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '1rem',
-  },
-  zoneName: {
-    fontWeight: '700',
-    fontSize: '1.05rem',
-    color: 'var(--text-main)',
-    fontFamily: 'Space Grotesk, sans-serif',
-  },
-  pill: {
-    padding: '0.2rem 0.6rem',
-    borderRadius: '4px',
-    fontSize: '0.7rem',
-    fontWeight: '600',
-    color: '#fff',
-    letterSpacing: '0.05em',
-    textTransform: 'uppercase',
-  },
-  seatGrid: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '6px',
-    marginBottom: '1rem',
-  },
-  seat: {
-    width: 14,
-    height: 14,
-    borderRadius: '4px',
-    transition: 'all var(--transition-fast)',
-  },
-  seatOverflow: {
-    fontSize: '0.75rem',
-    color: 'var(--text-muted)',
-    alignSelf: 'center',
-    marginLeft: '0.25rem',
-    fontWeight: '600',
-  },
-  zoneFooter: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: '0.5rem',
-    paddingTop: '1rem',
-    borderTop: '1px solid var(--border-color)',
-  },
-  zoneCount: {
-    fontSize: '0.85rem',
-    color: 'var(--text-secondary)',
-  },
+  zoneHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1rem 1rem 0.75rem' },
+  zoneCardName: { fontSize: '0.95rem', fontWeight: '700', color: '#F0F6FC', fontFamily: 'Inter, sans-serif', letterSpacing: '-0.02em' },
+  zoneStatus: { fontSize: '0.65rem', fontWeight: '800', letterSpacing: '0.08em', padding: '0.2rem 0.5rem', borderRadius: '9999px' },
+  zoneFooter: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.875rem 1rem' },
   bookBtn: {
-    padding: '0.625rem 1.25rem',
-    borderRadius: '100px',
-    border: 'none',
-    fontWeight: '600',
-    fontFamily: 'Outfit, sans-serif',
-    fontSize: '0.85rem',
-    transition: 'all var(--transition-fast)',
-    cursor: 'pointer',
+    padding: '0.45rem 1rem', borderRadius: '8px', border: 'none',
+    background: 'linear-gradient(135deg, #2F81F7, #7C3AED)',
+    color: '#fff', fontSize: '0.8rem', fontWeight: '700',
+    cursor: 'pointer', fontFamily: 'Inter, sans-serif',
+    boxShadow: '0 4px 12px rgba(47,129,247,0.25)',
+    transition: 'all 0.15s ease',
   },
-  detailItem: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '0.25rem',
-  },
-  detailLabel: {
-    fontSize: '0.75rem',
-    color: 'var(--text-muted)',
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-  },
-  detailValue: {
-    fontWeight: '700',
-    fontSize: '1rem',
-    color: 'var(--text-main)',
+  bookBtnDisabled: {
+    padding: '0.45rem 1rem', borderRadius: '8px',
+    background: 'rgba(255,255,255,0.04)', color: '#484F58',
+    border: '1px solid rgba(255,255,255,0.06)',
+    fontSize: '0.8rem', fontWeight: '600', cursor: 'not-allowed',
+    fontFamily: 'Inter, sans-serif',
   },
 };
