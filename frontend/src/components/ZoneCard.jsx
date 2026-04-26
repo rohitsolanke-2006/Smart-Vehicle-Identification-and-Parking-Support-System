@@ -1,28 +1,40 @@
 import React, { useState } from 'react';
-import { joinQueue, leaveQueue, getQueueStatus } from '../services/api';
+import { joinQueue, leaveQueue } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
 export default function ZoneCard({ zone }) {
   const { user } = useAuth();
-  const [queued, setQueued]     = useState(false);
-  const [queueMsg, setQueueMsg] = useState('');
+  const [queued, setQueued]         = useState(false);
+  const [queueMsg, setQueueMsg]     = useState('');
   const [queueLoading, setQueueLoading] = useState(false);
 
-  const pct = zone.occupancy_percent ?? Math.round(((zone.occupied ?? 0) / zone.capacity) * 100);
+  const occupied = zone.occupied ?? 0;
+  const pct = zone.occupancy_percent ?? Math.round((occupied / zone.capacity) * 100);
+  const free = zone.free_space !== undefined ? zone.free_space : (zone.capacity - occupied);
   const isFull = pct >= 90 || zone.status === 'RED';
-  const freeSpots = zone.free_space !== undefined ? zone.free_space : (zone.capacity - (zone.occupied ?? 0));
 
-  let statusColor = 'var(--status-green)';
-  let statusBg = 'var(--status-green-light)';
-  if (zone.status === 'RED'    || pct >= 90) { statusColor = 'var(--status-red)'; statusBg = 'var(--status-red-light)'; }
-  else if (zone.status === 'YELLOW' || pct >= 60) { statusColor = 'var(--status-yellow)'; statusBg = 'var(--status-yellow-light)'; }
-
-  const statusLabel = zone.status === 'RED' ? 'FULL' : zone.status === 'YELLOW' ? 'BUSY' : 'OPEN';
+  // Precise status system
+  let statusColor, statusLabel, statusBg, statusBorder, statusGlow;
+  if (pct >= 90 || zone.status === 'RED') {
+    statusColor  = '#F85149'; statusLabel = 'FULL';
+    statusBg     = 'rgba(248,81,73,0.1)';
+    statusBorder = 'rgba(248,81,73,0.25)';
+    statusGlow   = 'rgba(248,81,73,0.15)';
+  } else if (pct >= 60 || zone.status === 'YELLOW') {
+    statusColor  = '#D29922'; statusLabel = 'BUSY';
+    statusBg     = 'rgba(210,153,34,0.1)';
+    statusBorder = 'rgba(210,153,34,0.25)';
+    statusGlow   = 'rgba(210,153,34,0.12)';
+  } else {
+    statusColor  = '#3FB950'; statusLabel = 'OPEN';
+    statusBg     = 'rgba(63,185,80,0.1)';
+    statusBorder = 'rgba(63,185,80,0.25)';
+    statusGlow   = 'rgba(63,185,80,0.12)';
+  }
 
   const handleQueue = async () => {
     if (!user || user.role !== 'student') return;
-    setQueueLoading(true);
-    setQueueMsg('');
+    setQueueLoading(true); setQueueMsg('');
     try {
       if (queued) {
         await leaveQueue(zone.zone_name || zone.name);
@@ -31,215 +43,149 @@ export default function ZoneCard({ zone }) {
       } else {
         await joinQueue(zone.zone_name || zone.name);
         setQueued(true);
-        setQueueMsg('You\'re on the waitlist — we\'ll notify you when a spot opens!');
+        setQueueMsg("You're on the waitlist!");
       }
     } catch (err) {
-      setQueueMsg(err.message || 'Failed to update queue.');
-    } finally {
-      setQueueLoading(false);
-    }
+      setQueueMsg(err.message || 'Failed.');
+    } finally { setQueueLoading(false); }
   };
 
   return (
-    <div style={{ ...styles.card, borderColor: statusColor, '--status-color': statusColor }}>
-      {/* Status indicator bar */}
-      <div style={{ ...styles.statusBar, background: statusBg }} />
+    <div style={{ ...card, borderColor: statusBorder }}>
+      {/* Top accent line */}
+      <div style={{ ...topLine, background: statusColor, boxShadow: `0 0 12px ${statusColor}` }} />
 
       {/* Header */}
-      <div style={styles.header}>
-        <div style={styles.titleRow}>
-          <h3 style={styles.zoneName}>{zone.zone_name || zone.name}</h3>
-          <span style={styles.zoneType}>{zone.capacity} spots</span>
+      <div style={header}>
+        <div>
+          <div style={zoneName}>{zone.zone_name || zone.name}</div>
+          <div style={zoneCapacity}>{zone.capacity} spots total</div>
         </div>
-        <span style={{ ...styles.badge, background: statusColor, boxShadow: `0 2px 8px ${statusColor}40` }}>
+        <div style={{ ...pill, color: statusColor, background: statusBg, border: `1px solid ${statusBorder}` }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: statusColor, display: 'inline-block', boxShadow: `0 0 6px ${statusColor}` }} />
           {statusLabel}
-        </span>
+        </div>
       </div>
 
-      {/* Stats */}
-      <div style={styles.stats}>
-        <div style={styles.stat}>
-          <span style={styles.statLabel}>Available</span>
-          <span style={{ ...styles.statVal, color: statusColor }}>{freeSpots}</span>
+      {/* Big numbers */}
+      <div style={statsRow}>
+        <div style={stat}>
+          <div style={{ ...statNum, color: statusColor }}>{free}</div>
+          <div style={statLabel}>Free</div>
         </div>
-        <div style={styles.stat}>
-          <span style={styles.statLabel}>Occupied</span>
-          <span style={styles.statVal}>{zone.occupied ?? 0}</span>
+        <div style={statDivider} />
+        <div style={stat}>
+          <div style={statNum}>{occupied}</div>
+          <div style={statLabel}>Occupied</div>
+        </div>
+        <div style={statDivider} />
+        <div style={stat}>
+          <div style={statNum}>{zone.capacity}</div>
+          <div style={statLabel}>Total</div>
         </div>
       </div>
 
       {/* Progress bar */}
-      <div style={styles.barContainer}>
-        <div style={styles.barBg}>
-          <div style={{ ...styles.barFill, width: `${pct}%`, background: statusColor }} />
+      <div style={barSection}>
+        <div style={barTrack}>
+          <div style={{ ...barFill, width: `${pct}%`, background: statusColor, boxShadow: `0 0 10px ${statusColor}80` }} />
         </div>
-        <span style={styles.pctLabel}>{pct}% full</span>
+        <span style={barLabel}>{pct}%</span>
       </div>
 
-      {/* Virtual Queue — only for students when zone is full */}
+      {/* Queue section */}
       {user?.role === 'student' && isFull && (
-        <div style={styles.queueBox}>
-          <button
-            onClick={handleQueue}
-            disabled={queueLoading}
-            style={{
-              ...styles.queueBtn,
-              background: queued ? 'var(--status-red-light)' : 'var(--primary)',
-              color: queued ? 'var(--status-red)' : '#ffffff',
-              border: queued ? '1.5px solid var(--status-red)' : '1.5px solid transparent',
-            }}>
-            {queueLoading ? (
-              <span style={styles.loadingDots}>Processing…</span>
-            ) : queued ? (
-              <>Leave Waitlist</>
-            ) : (
-              <>Notify Me When Open</>
-            )}
+        <div style={queueSection}>
+          <button onClick={handleQueue} disabled={queueLoading} style={queued ? queueBtnLeave : queueBtnJoin}>
+            {queueLoading ? '...' : queued ? 'Leave Waitlist' : 'Notify When Open'}
           </button>
-          {queueMsg && (
-            <p style={{
-              ...styles.queueMsg,
-              color: queued ? 'var(--status-green)' : 'var(--text-muted)'
-            }}>{queueMsg}</p>
-          )}
+          {queueMsg && <p style={{ marginTop: '0.625rem', fontSize: '0.8rem', color: queued ? '#3FB950' : '#8B949E', textAlign: 'center' }}>{queueMsg}</p>}
         </div>
       )}
     </div>
   );
 }
 
-const styles = {
-  card: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '0.875rem',
-    padding: '0 0 1.25rem 0',
-    border: '1px solid var(--border-color)',
-    borderRadius: 'var(--radius-xl)',
-    overflow: 'hidden',
-    position: 'relative',
-    background: 'var(--bg-card)',
-    backdropFilter: 'blur(20px)',
-    WebkitBackdropFilter: 'blur(20px)',
-    transition: 'all var(--transition-normal)',
-    boxShadow: 'var(--shadow-sm)',
-  },
-  statusBar: {
-    height: '4px',
-    width: '100%',
-    boxShadow: '0 2px 8px var(--status-color)',
-  },
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    padding: '1.25rem 1.25rem 0',
-  },
-  titleRow: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '0.25rem',
-  },
-  zoneName: {
-    margin: 0,
-    fontSize: '1.2rem',
-    fontWeight: '700',
-    color: 'var(--text-main)',
-    letterSpacing: '-0.02em',
-    fontFamily: 'Space Grotesk, sans-serif',
-  },
-  zoneType: {
-    fontSize: '0.85rem',
-    color: 'var(--text-muted)',
-    fontWeight: '500',
-  },
-  badge: {
-    padding: '0.2rem 0.6rem',
-    borderRadius: '4px',
-    fontSize: '0.7rem',
-    fontWeight: '600',
-    color: '#fff',
-    letterSpacing: '0.05em',
-    textTransform: 'uppercase',
-  },
-  stats: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: '1rem',
-    padding: '0 1.25rem',
-    marginTop: '0.5rem',
-  },
-  stat: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '0.125rem',
-  },
-  statLabel: {
-    fontSize: '0.75rem',
-    color: 'var(--text-muted)',
-    textTransform: 'uppercase',
-    letterSpacing: '0.06em',
-    fontWeight: '600',
-  },
-  statVal: {
-    fontSize: '2rem',
-    fontWeight: '800',
-    lineHeight: '1.1',
-    letterSpacing: '-0.02em',
-    fontFamily: 'Space Grotesk, sans-serif',
-  },
-  barContainer: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.75rem',
-    padding: '0 1.25rem',
-    marginTop: '0.5rem',
-  },
-  barBg: {
-    flex: 1,
-    height: '6px',
-    background: 'rgba(255,255,255,0.08)',
-    borderRadius: '4px',
-    overflow: 'hidden',
-  },
-  barFill: {
-    height: '100%',
-    borderRadius: '4px',
-    transition: 'width 0.8s cubic-bezier(0.4, 0, 0.2, 1), background 0.5s ease',
-  },
-  pctLabel: {
-    fontSize: '0.8rem',
-    color: 'var(--text-muted)',
-    fontWeight: '600',
-    whiteSpace: 'nowrap',
-  },
-  queueBox: {
-    marginTop: '0.5rem',
-    padding: '1.25rem',
-    borderTop: '1px solid var(--border-color)',
-    background: 'rgba(0,0,0,0.2)',
-  },
-  queueBtn: {
-    width: '100%',
-    padding: '0.75rem 1rem',
-    borderRadius: '4px',
-    fontSize: '0.85rem',
-    fontWeight: '500',
-    cursor: 'pointer',
-    fontFamily: 'Outfit, sans-serif',
-    transition: 'all var(--transition-fast)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '0.5rem',
-  },
-  loadingDots: {
-    opacity: '0.8',
-  },
-  queueMsg: {
-    margin: '0.75rem 0 0',
-    fontSize: '0.85rem',
-    textAlign: 'center',
-    fontWeight: '500',
-  },
+/* ── Styles ── */
+const card = {
+  position: 'relative',
+  background: 'rgba(13,17,23,0.7)',
+  backdropFilter: 'blur(32px)',
+  WebkitBackdropFilter: 'blur(32px)',
+  border: '1px solid',
+  borderRadius: '16px',
+  overflow: 'hidden',
+  transition: 'transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease',
+  boxShadow: '0 2px 8px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05)',
+};
+const topLine = { height: '2px', width: '100%', transition: 'box-shadow 0.3s ease' };
+const header = {
+  display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+  padding: '1.25rem 1.25rem 0',
+};
+const zoneName = {
+  fontSize: '1.05rem', fontWeight: '700', color: '#F0F6FC',
+  fontFamily: 'Inter, sans-serif', letterSpacing: '-0.02em', marginBottom: '0.2rem',
+};
+const zoneCapacity = {
+  fontSize: '0.78rem', color: '#484F58', fontWeight: '500', fontFamily: 'Inter, sans-serif',
+};
+const pill = {
+  display: 'inline-flex', alignItems: 'center', gap: '0.35rem',
+  padding: '0.25rem 0.625rem', borderRadius: '9999px',
+  fontSize: '0.7rem', fontWeight: '800', letterSpacing: '0.08em',
+  fontFamily: 'Inter, sans-serif',
+};
+const statsRow = {
+  display: 'flex', alignItems: 'center',
+  padding: '1.25rem',
+  gap: 0,
+};
+const stat = { flex: 1, textAlign: 'center' };
+const statNum = {
+  fontSize: '2rem', fontWeight: '800', letterSpacing: '-0.04em',
+  lineHeight: '1', color: '#F0F6FC',
+  fontFamily: 'Inter, sans-serif', marginBottom: '0.25rem',
+};
+const statLabel = {
+  fontSize: '0.7rem', fontWeight: '600', letterSpacing: '0.08em',
+  textTransform: 'uppercase', color: '#484F58', fontFamily: 'Inter, sans-serif',
+};
+const statDivider = { width: '1px', height: '2.5rem', background: 'rgba(255,255,255,0.06)', margin: '0 0.5rem' };
+const barSection = {
+  display: 'flex', alignItems: 'center', gap: '0.75rem',
+  padding: '0 1.25rem 1.25rem',
+};
+const barTrack = {
+  flex: 1, height: '4px', borderRadius: '9999px',
+  background: 'rgba(255,255,255,0.06)',
+  overflow: 'hidden',
+};
+const barFill = {
+  height: '100%', borderRadius: '9999px',
+  transition: 'width 0.8s cubic-bezier(0.16,1,0.3,1)',
+};
+const barLabel = { fontSize: '0.75rem', color: '#484F58', fontWeight: '600', fontFamily: 'JetBrains Mono, monospace', whiteSpace: 'nowrap' };
+const queueSection = {
+  padding: '1rem 1.25rem',
+  borderTop: '1px solid rgba(255,255,255,0.05)',
+  background: 'rgba(0,0,0,0.25)',
+};
+const queueBtnBase = {
+  width: '100%', padding: '0.625rem 1rem', borderRadius: '8px',
+  fontSize: '0.82rem', fontWeight: '600', cursor: 'pointer',
+  fontFamily: 'Inter, sans-serif', transition: 'all 0.15s ease',
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+};
+const queueBtnJoin = {
+  ...queueBtnBase,
+  background: 'linear-gradient(135deg, #2F81F7, #7C3AED)',
+  color: '#fff', border: 'none',
+  boxShadow: '0 4px 14px rgba(47,129,247,0.3)',
+};
+const queueBtnLeave = {
+  ...queueBtnBase,
+  background: 'rgba(248,81,73,0.08)',
+  color: '#F85149',
+  border: '1px solid rgba(248,81,73,0.25)',
 };
